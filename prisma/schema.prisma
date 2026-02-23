@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  OPERADOR
+  CLIENTE
+}
+
+enum Servicio {
+  ESTANDAR
+  EXPRESS
+}
+
+enum EstadoOrden {
+  CREADA
+  EN_RECOLECCION
+  EN_RUTA
+  ENTREGADA
+  DEVUELTA
+  CANCELADA
+}
+
+enum EstadoLiquidacion {
+  PENDIENTE
+  PAGADA
+}
+
+model User {
+  id            String         @id @default(cuid())
+  nombre        String
+  email         String         @unique
+  hash          String
+  rol           Rol            @default(CLIENTE)
+  createdAt     DateTime       @default(now())
+  ordenes       Order[]
+  eventos       OrderEvent[]   @relation("ActorEventos")
+  liquidaciones Settlement[]   @relation("MerchantLiquidaciones")
+  auditorias    AuditLog[]
+}
+
+model City {
+  id           String  @id @default(cuid())
+  nombre       String
+  departamento String
+  zona         String
+  origenRates  Rate[]  @relation("OrigenCity")
+  destinoRates Rate[]  @relation("DestinoCity")
+  ordenesOrigen Order[] @relation("OrigenOrden")
+  ordenesDestino Order[] @relation("DestinoOrden")
+}
+
+model Rate {
+  id                 String    @id @default(cuid())
+  zonaOrigen         String
+  zonaDestino        String
+  servicio           Servicio
+  pesoMin            Float
+  pesoMax            Float
+  precioBase         Float
+  precioPorKg        Float
+  tiempoEstimadoDias Int
+  createdAt          DateTime  @default(now())
+}
+
+model ConfigRegla {
+  id                          String  @id @default(cuid())
+  seguroPorcentaje            Float   @default(0.01)
+  seguroMinimo                Float   @default(3000)
+  recaudoPorcentaje           Float   @default(0.015)
+  recaudoFijo                 Float   @default(2000)
+  comisionPorcentaje          Float   @default(0.05)
+  comisionSobre               String  @default("FLETE")
+  actualizadoPorId            String?
+  actualizadoPor              User?   @relation(fields: [actualizadoPorId], references: [id])
+  updatedAt                   DateTime @updatedAt
+}
+
+model Order {
+  id                  String        @id @default(cuid())
+  codigo              String        @unique
+  userId              String
+  user                User          @relation(fields: [userId], references: [id])
+  origenCityId        String
+  origenCity          City          @relation("OrigenOrden", fields: [origenCityId], references: [id])
+  destinoCityId       String
+  destinoCity         City          @relation("DestinoOrden", fields: [destinoCityId], references: [id])
+  datosRemitente      Json
+  datosDestinatario   Json
+  pesoReal            Float
+  pesoVolumetrico     Float
+  valorDeclarado      Float
+  valorContraentrega  Float
+  servicio            Servicio
+  totalEstimado       Float
+  estado              EstadoOrden   @default(CREADA)
+  createdAt           DateTime      @default(now())
+  eventos             OrderEvent[]
+  recaudo             Collection?
+}
+
+model OrderEvent {
+  id          String      @id @default(cuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id])
+  estado      EstadoOrden
+  nota        String?
+  createdAt   DateTime    @default(now())
+  actorUserId String?
+  actor       User?       @relation("ActorEventos", fields: [actorUserId], references: [id])
+}
+
+model Collection {
+  id            String   @id @default(cuid())
+  orderId        String   @unique
+  order          Order    @relation(fields: [orderId], references: [id])
+  montoRecaudado Float
+  fecha          DateTime
+  metodo         String
+  referencia     String?
+}
+
+model Settlement {
+  id               String            @id @default(cuid())
+  merchantUserId   String
+  merchantUser     User              @relation("MerchantLiquidaciones", fields: [merchantUserId], references: [id])
+  desde            DateTime
+  hasta            DateTime
+  totalRecaudado   Float
+  totalComisiones  Float
+  totalALiquidar   Float
+  estado           EstadoLiquidacion @default(PENDIENTE)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  accion      String
+  entidad     String
+  entidadId   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+}
